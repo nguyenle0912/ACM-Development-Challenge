@@ -27,7 +27,7 @@ class TagModel(db.Model):
     def __repr__(self): #string representation of this model
         return f"Tag(name = {name}, contents = {contents})"
 
-db.create_all()
+db.create_all() #only need to do this once, comment out this line if don't want a new database for every compile
 
 
 tag_post_args = reqparse.RequestParser() #automatically parse through requests that are being sent to make it fits the guidelines that are detailed in the following code
@@ -35,35 +35,34 @@ tag_post_args.add_argument("name", type=str, help="Name of Tag is required!") #t
 tag_post_args.add_argument("contents", type=str, help="Content of Tag is required")
 tag_post_args.add_argument("token", type=str, help="Unique token for data retrieval")
 
-tag_update_delete_args = reqparse.RequestParser() #parse arguments for update, each argument is optional
-tag_update_delete_args.add_argument("name", type=str, help="Name of tag")
-tag_update_delete_args.add_argument("contents", type=str, help="Contents of tag")
-tag_update_delete_args.add_argument("token", type=str, help="Unique token for data retrieval")
+tag_update_args = reqparse.RequestParser() #parse arguments for update, each argument is optional
+tag_update_args.add_argument("name", type=str, help="Name of tag")
+tag_update_args.add_argument("contents", type=str, help="Contents of tag")
+tag_update_args.add_argument("token", type=str, help="Unique token for data retrieval")
 
-#serialize Model to get a json response from model
+#for POST: serialize Model to get a json response 
 post_resource_fields = {
     'name': fields.String,
     'contents': fields.String,
     'token': fields.String,
 }
-
+#for GET, PATCH, DELETE: serialize Model to get a json response
 resource_fields = {
     'name': fields.String,
     'contents': fields.String,
 }
 
-def get_tag_with_keys(dict, get_keys): #this function allows get to only return name and contents and not token. 
-    return {k:dict[k] for k in get_keys if k in dict}
-
 class Tag(Resource):
 
     @marshal_with(post_resource_fields)
     def post(self, tag_name):
-        args = tag_post_args.parse_args()
-        result = TagModel.query.filter_by(name=tag_name).first() #check if video already exists
-        if result:
-            abort(409, message="Tag already exists") #abort if it already exists
+        args = tag_post_args.parse_args() #get input data
+        result = TagModel.query.filter_by(name=tag_name).first() #filter database by tag name and return the first entry
+        if result:  #abort if tag already exists
+            abort(409, message="Tag already exists")
         tag = TagModel(tag_name = tag_name, name = args['name'], contents = args['contents'], token = secrets.token_urlsafe(15))
+        
+        #post tag to database and commit the changes
         db.session.add(tag)
         db.session.commit()
         return tag, 201 #sucess post 
@@ -78,25 +77,33 @@ class Tag_Token(Resource):
 
     @marshal_with(resource_fields)
     def patch(self, tag_name, token): #update
-        args = tag_update_delete_args.parse_args()
-        result = TagModel.query.filter_by(tag_name = tag_name, token = token).first()
+        #check if tag exists
+        args = tag_update_args.parse_args()
+        result = TagModel.query.filter_by(tag_name = tag_name, token = token).first() #filter database by tag name and token and return the first entry
         if not result:
-            abort(404, message="Video doesn't exist, cannot update...")
+            abort(404, message="Tag doesn't exist, cannot update...")
         
-        if args['name']:
+        #make updates of passed in arguments correspondingly
+        if args['name']: 
             result.name = args['name']
         if args['contents']:
             result.contents = args['contents']
         
+        #commit changes
         db.session.commit()
         return result
 
     def delete(self, tag_name, token):
-        # if tags[tag_name]['token'] == token: #only tag with the given token will be deleted
-        #     del tags[tag_name]
-        #     return '200 OK'
-        # else:
-        return '404 Delete Failed', 404
+        #make sure tag exists to delete
+        result = TagModel.query.filter_by(tag_name = tag_name, token = token)
+        if not result.first():
+            abort(404, message="Tag doesn't exist, cannot delete...")
+        
+        #delete and commit changes
+        result.delete()
+        db.session.commit()
+        return "200 OK"
+        
 
 api.add_resource(Tag, "/tags/<string:tag_name>") #for get and post requests
 api.add_resource(Tag_Token, "/tags/<string:tag_name>/<string:token>") #for delete and patch requests
