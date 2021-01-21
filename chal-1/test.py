@@ -25,7 +25,6 @@ response = requests.get(get_url)
 print(response.json())
 
 
-updated_linux_data = 
 print("\nMake a patch request to update the linux tag...")
 patch_token = input("Enter the token of the tag you want to update: ")
 patch_url = BASE + "tags/linux" + patch_token
